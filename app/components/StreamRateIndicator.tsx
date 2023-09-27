@@ -99,6 +99,36 @@ export default function StreamRateIndicator() {
     */
     let aptPerSec = 0;
 
+    /** Sender streams */
+    const senderStreams = await getSenderStreams();
+    const sumSenderAmount = senderStreams.reduce(
+      (acc: any, cur: any) => acc + cur.data.amount, 
+      0,);
+    const sumSenderDuration = senderStreams.reduce(
+      (acc: any, cur: any) => acc + parseFloat(cur.data.duration_in_seconds), 
+      0,);
+      
+    let aptSender = 0;
+    if (sumSenderAmount != 0) {
+      aptSender = sumSenderAmount / sumSenderDuration;
+    }
+    
+    /** Receiver streams */
+    const receiverStreams = await getReceiverStreams();
+    const sumReceiverAmount = receiverStreams?.active.reduce(
+      (acc: any, cur: any) => acc + cur.data.amount, 
+      0,);
+    const sumReceiverDuration = receiverStreams?.active.reduce(
+      (acc: any, cur: any) => acc + cur.data.duration_in_seconds, 
+      0,);
+    
+    let aptReceiver = 0;
+    if (sumSenderAmount != 0) {
+      aptReceiver = sumReceiverAmount / sumReceiverDuration;
+    }
+    
+    aptPerSec = aptReceiver - aptSender;
+
     return aptPerSec;
   };
 
@@ -106,31 +136,60 @@ export default function StreamRateIndicator() {
     /*
      TODO #2: Validate the account is defined before continuing. If not, return.
    */
+    if (!account) {
+      return;
+    }
 
     /*
        TODO #3: Make a request to the view function `get_senders_streams` to retrieve the streams sent by 
              the user.
     */
-
+    const response = await fetch (
+      `https://fullnode.testnet.aptoslabs.com/v1/accounts/${process.env.RESOURCE_ACCOUNT_ADDRESS}/events/${process.env.MODULE_ADDRESS}::${process.env.MODULE_NAME}::ModuleEventStore/stream_create_events?limit=10000`,
+      {
+        method: 'GET'
+      }
+    );
     /* 
-       TODO #4: Parse the response from the view request and create the streams array using the given 
-             data. Return the new streams array.
- 
-       HINT:
-        - Remember to convert the amount to floating point number
+    TODO #4: Parse the response from the view request and create the streams array using the given 
+    data. Return the new streams array.
+    
+    HINT:
+    - Remember to convert the amount to floating point number
     */
-    return [];
+   
+    const eventData = await response.json();
+    const mydata = eventData.filter((event: any) => (
+      event.data.sender_address == account.address
+    ))
+  
+    mydata.map((event: any) => (
+      event.data.amount = parseFloat(event.data.amount)
+    ));
+
+    return mydata;
   };
 
   const getReceiverStreams = async () => {
     /*
       TODO #5: Validate the account is defined before continuing. If not, return.
     */
+    if (!account) {
+      return;
+    }
 
     /*
       TODO #6: Make a request to the view function `get_receivers_streams` to retrieve the streams sent by 
             the user.
     */
+    const response = await fetch (
+      `https://fullnode.testnet.aptoslabs.com/v1/accounts/${process.env.RESOURCE_ACCOUNT_ADDRESS}/events/${process.env.MODULE_ADDRESS}::${process.env.MODULE_NAME}::ModuleEventStore/stream_create_events?limit=10000`,
+      {
+        method: 'GET'
+      }
+    );
+  
+    const eventData = await response.json();
 
     /* 
       TODO #7: Parse the response from the view request and create an object containing an array of 
@@ -143,10 +202,33 @@ export default function StreamRateIndicator() {
         - Mark a stream as completed if the start timestamp + duration is less than the current time
         - Mark a stream as active if it is not pending or completed
     */
+    const mydata = eventData.filter((event: any) => (
+      // event.data.receiver_address == "0x6074a2957adaa2840988e978c9f0957e4285516279a264a3584db9715b5feced"
+      event.data.receiver_address == account.address
+    ))
+    mydata.map((event: any) => (
+      event.data.amount = parseFloat(event.data.amount)
+      ));
+    
+    /** current time in seconds */
+    const currenttime = Date.now() / 1000;
+
+    const pending = mydata.filter((event: any) => (
+      parseFloat(event.data.timestamp) == 0
+    ));
+
+    const completed = mydata.filter((event: any) => (
+      (parseFloat(event.data.timestamp) + parseFloat(event.data.duration_in_seconds) < currenttime)
+    ));
+
+    const active = mydata.filter((event: any) => (
+      (parseFloat(event.data.timestamp) + parseFloat(event.data.duration_in_seconds) >= currenttime)
+    ))
+    
     return {
-      pending: [],
-      completed: [],
-      active: [],
+      pending: pending,
+      completed: completed,
+      active: active,
     };
   };
 
